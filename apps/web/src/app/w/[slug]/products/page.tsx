@@ -4,9 +4,10 @@
 
 import { prisma } from '@ugc/database';
 import { getWorkspaceContext } from '@/lib/workspace';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
 import { formatCurrency } from '@ugc/shared';
+import { AddProductDialog } from '@/components/products/add-product-dialog';
+import { ShopifyImportDialog } from '@/components/products/shopify-import-dialog';
 
 interface ProductsPageProps {
   params: { slug: string };
@@ -34,8 +35,8 @@ export default async function ProductsPage({ params }: ProductsPageProps) {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">Connect Shopify</Button>
-          <Button>Add Product</Button>
+          <ShopifyImportDialog slug={params.slug} />
+          <AddProductDialog slug={params.slug} />
         </div>
       </div>
 
@@ -44,8 +45,8 @@ export default async function ProductsPage({ params }: ProductsPageProps) {
           <CardContent className="flex flex-col items-center justify-center py-16">
             <p className="text-muted-foreground mb-4">No products yet</p>
             <div className="flex gap-2">
-              <Button variant="outline">Connect Shopify</Button>
-              <Button>Add Manually</Button>
+              <ShopifyImportDialog slug={params.slug} />
+              <AddProductDialog slug={params.slug} />
             </div>
           </CardContent>
         </Card>

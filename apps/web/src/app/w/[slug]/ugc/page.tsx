@@ -4,9 +4,9 @@
 
 import { prisma } from '@ugc/database';
 import { getWorkspaceContext } from '@/lib/workspace';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { formatNumber, formatRelativeTime } from '@ugc/shared';
+import { ImportUgcDialog } from '@/components/ugc/import-ugc-dialog';
 
 interface UgcPageProps {
   params: { slug: string };
@@ -54,14 +54,14 @@ export default async function UgcPage({ params }: UgcPageProps) {
             Browse and manage imported user-generated content
           </p>
         </div>
-        <Button>Import UGC</Button>
+        <ImportUgcDialog slug={params.slug} />
       </div>
 
       {posts.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-16">
             <p className="text-muted-foreground mb-4">No UGC posts yet</p>
-            <Button>Import Your First Post</Button>
+            <ImportUgcDialog slug={params.slug} />
           </CardContent>
         </Card>
       ) : (

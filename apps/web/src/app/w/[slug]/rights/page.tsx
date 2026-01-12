@@ -5,8 +5,8 @@
 import { prisma } from '@ugc/database';
 import { getWorkspaceContext } from '@/lib/workspace';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { formatRelativeTime } from '@ugc/shared';
+import { SendRequestButton } from '@/components/rights/send-request-button';
 
 interface RightsPageProps {
   params: { slug: string };
@@ -139,7 +139,11 @@ export default async function RightsPage({ params }: RightsPageProps) {
                         {request.status}
                       </span>
                       {request.status === 'PENDING' && (
-                        <Button size="sm">Send Request</Button>
+                        <SendRequestButton 
+                          slug={params.slug} 
+                          requestId={request.id} 
+                          creatorHandle={request.ugcPost.creatorHandle}
+                        />
                       )}
                     </div>
                   </div>

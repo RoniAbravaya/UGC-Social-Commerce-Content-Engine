@@ -6,6 +6,7 @@ import { prisma } from '@ugc/database';
 import { getWorkspaceContext, hasPermission } from '@/lib/workspace';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { WorkspaceSettingsForm } from '@/components/workspace/workspace-settings-form';
+import { DeleteWorkspaceDialog } from '@/components/settings/delete-workspace-dialog';
 
 interface SettingsPageProps {
   params: { slug: string };
@@ -97,11 +98,7 @@ export default async function SettingsPage({ params }: SettingsPageProps) {
                   Permanently delete this workspace and all its data
                 </p>
               </div>
-              <button
-                className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-destructive text-destructive-foreground hover:bg-destructive/90 h-9 px-4"
-              >
-                Delete Workspace
-              </button>
+              <DeleteWorkspaceDialog slug={params.slug} workspaceName={workspace.name} />
             </div>
           </CardContent>
         </Card>
