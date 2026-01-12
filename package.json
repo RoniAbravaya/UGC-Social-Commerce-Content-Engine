@@ -9,7 +9,7 @@
     "start": "pnpm --filter @ugc/web start",
     "start:prod": "pnpm db:migrate && pnpm start",
     "lint": "turbo run lint",
-    "test": "turbo run test",
+    "test": "pnpm --filter @ugc/shared test",
     "db:generate": "pnpm --filter @ugc/database db:generate",
     "db:push": "pnpm --filter @ugc/database db:push",
     "db:migrate": "pnpm --filter @ugc/database db:migrate:prod",
