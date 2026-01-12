@@ -28,6 +28,9 @@ Thumbs.db
 coverage
 .nyc_output
 
+# TypeScript build info
+*.tsbuildinfo
+
 # Logs
 *.log
 npm-debug.log*
