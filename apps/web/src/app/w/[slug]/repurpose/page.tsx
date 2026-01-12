@@ -5,7 +5,8 @@
 import { prisma } from '@ugc/database';
 import { getWorkspaceContext } from '@/lib/workspace';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { CreateClipsDialog } from '@/components/repurpose/create-clips-dialog';
+import { ClipPreviewDialog, ClipExportButton, BrowseContentButton } from '@/components/repurpose/clip-actions';
 
 interface RepurposePageProps {
   params: { slug: string };
@@ -51,7 +52,7 @@ export default async function RepurposePage({ params }: RepurposePageProps) {
             Create platform-ready clips from your approved UGC content
           </p>
         </div>
-        <Button>Create Clips</Button>
+        <CreateClipsDialog slug={params.slug} />
       </div>
 
       {/* Active Jobs */}
@@ -96,34 +97,70 @@ export default async function RepurposePage({ params }: RepurposePageProps) {
               <p className="text-muted-foreground mb-4">
                 No clips yet. Select approved UGC content to start creating clips.
               </p>
-              <Button variant="outline">Browse Approved Content</Button>
+              <BrowseContentButton slug={params.slug} />
             </div>
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {clips.map((clip) => (
-                <div key={clip.id} className="rounded-lg border overflow-hidden">
-                  <div className="aspect-[9/16] bg-muted flex items-center justify-center">
-                    <span className="text-muted-foreground text-sm">Video Preview</span>
-                  </div>
-                  <div className="p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted">
-                        {clip.format.replace('_', ' ')}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        {clip.duration ? `${Math.round(clip.duration)}s` : 'N/A'}
-                      </span>
+              {clips.map((clip) => {
+                const creatorHandle = clip.sourceMediaAsset?.ugcPost?.creatorHandle || 'unknown';
+                
+                return (
+                  <div key={clip.id} className="rounded-lg border overflow-hidden">
+                    <div className="aspect-[9/16] bg-muted flex items-center justify-center relative">
+                      {clip.thumbnailUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img 
+                          src={clip.thumbnailUrl} 
+                          alt="Clip thumbnail"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-muted-foreground text-sm">Video Preview</span>
+                      )}
+                      {clip.status === 'PROCESSING' && (
+                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                          <div className="text-white text-sm">Processing...</div>
+                        </div>
+                      )}
                     </div>
-                    <p className="text-sm text-muted-foreground">
-                      From @{clip.sourceMediaAsset?.ugcPost?.creatorHandle || 'unknown'}
-                    </p>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" className="flex-1">Preview</Button>
-                      <Button size="sm" className="flex-1">Export</Button>
+                    <div className="p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium px-2 py-0.5 rounded bg-muted">
+                          {clip.format.replace('_', ':')}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {clip.duration ? `${Math.round(clip.duration)}s` : 'N/A'}
+                        </span>
+                      </div>
+                      <p className="text-sm text-muted-foreground">
+                        From @{creatorHandle}
+                      </p>
+                      <div className="flex gap-2">
+                        <ClipPreviewDialog 
+                          clip={{
+                            id: clip.id,
+                            storageUrl: clip.storageUrl,
+                            format: clip.format,
+                            duration: clip.duration,
+                            thumbnailUrl: clip.thumbnailUrl,
+                            captionTrackUrl: clip.captionTrackUrl,
+                          }}
+                          creatorHandle={creatorHandle}
+                        />
+                        <ClipExportButton 
+                          clip={{
+                            id: clip.id,
+                            storageUrl: clip.storageUrl,
+                            format: clip.format,
+                          }}
+                          creatorHandle={creatorHandle}
+                          slug={params.slug}
+                        />
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </CardContent>
