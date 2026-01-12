@@ -1,0 +1,581 @@
+// =============================================================================
+// UGC Commerce Engine - Prisma Schema
+// Multi-tenant SaaS database schema for managing UGC, rights, and commerce
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// ENUMS
+// =============================================================================
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  ANALYST
+}
+
+enum WorkspacePlan {
+  FREE
+  STARTER
+  GROWTH
+  SCALE
+}
+
+enum Platform {
+  TIKTOK
+  INSTAGRAM
+  YOUTUBE
+  MANUAL
+}
+
+enum SocialAccountStatus {
+  CONNECTED
+  DISCONNECTED
+  EXPIRED
+  ERROR
+}
+
+enum RightsStatus {
+  PENDING
+  REQUESTED
+  APPROVED
+  DENIED
+  EXPIRED
+}
+
+enum MediaType {
+  VIDEO
+  IMAGE
+}
+
+enum MediaStatus {
+  PENDING
+  DOWNLOADING
+  PROCESSING
+  READY
+  ERROR
+}
+
+enum JobStatus {
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum ClipFormat {
+  VERTICAL_9_16
+  SQUARE_1_1
+  HORIZONTAL_16_9
+}
+
+enum ProductProvider {
+  SHOPIFY
+  MANUAL
+}
+
+enum EventType {
+  PAGE_VIEW
+  VIDEO_VIEW
+  VIDEO_PLAY
+  VIDEO_COMPLETE
+  PRODUCT_CLICK
+  ADD_TO_CART
+  CHECKOUT_START
+  PURCHASE
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  DENY
+  PUBLISH
+  UNPUBLISH
+  EXPORT
+}
+
+// =============================================================================
+// AUTH & MULTI-TENANCY
+// =============================================================================
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?
+  passwordHash  String?   // For email/password auth
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  accounts         Account[]
+  sessions         Session[]
+  workspaceMembers WorkspaceMember[]
+  auditLogs        AuditLog[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// =============================================================================
+// WORKSPACES & RBAC
+// =============================================================================
+
+model Workspace {
+  id               String        @id @default(cuid())
+  name             String
+  slug             String        @unique
+  plan             WorkspacePlan @default(FREE)
+  stripeCustomerId String?
+  subscriptionId   String?
+  subscriptionStatus String?
+  logoUrl          String?
+  domain           String?       // Custom domain for shoppable pages
+  settings         Json?         // Workspace-level settings
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  // Relations
+  members          WorkspaceMember[]
+  socialAccounts   SocialAccount[]
+  ugcPosts         UgcPost[]
+  rightsRequests   RightsRequest[]
+  mediaAssets      MediaAsset[]
+  repurposeJobs    RepurposeJob[]
+  repurposedClips  RepurposedClip[]
+  products         Product[]
+  contentProductMaps ContentProductMap[]
+  campaigns        Campaign[]
+  shoppablePages   ShoppablePage[]
+  events           Event[]
+  auditLogs        AuditLog[]
+  invitations      WorkspaceInvitation[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  userId      String
+  workspaceId String
+  role        WorkspaceRole @default(MEMBER)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@map("workspace_members")
+}
+
+model WorkspaceInvitation {
+  id          String        @id @default(cuid())
+  email       String
+  workspaceId String
+  role        WorkspaceRole @default(MEMBER)
+  token       String        @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([email, workspaceId])
+  @@map("workspace_invitations")
+}
+
+// =============================================================================
+// SOCIAL ACCOUNTS & UGC
+// =============================================================================
+
+model SocialAccount {
+  id                  String              @id @default(cuid())
+  workspaceId         String
+  platform            Platform
+  handle              String
+  displayName         String?
+  profileUrl          String?
+  profileImageUrl     String?
+  authTokensEncrypted String?             @db.Text // Encrypted OAuth tokens
+  status              SocialAccountStatus @default(CONNECTED)
+  lastSyncAt          DateTime?
+  syncSettings        Json?               // Hashtags to watch, etc.
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ugcPosts  UgcPost[]
+
+  @@unique([workspaceId, platform, handle])
+  @@map("social_accounts")
+}
+
+model UgcPost {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  socialAccountId String?
+  platform        Platform
+  postUrl         String
+  postId          String?   // Platform-specific post ID
+  creatorHandle   String
+  creatorName     String?
+  creatorProfileUrl String?
+  caption         String?   @db.Text
+  hashtags        String[]  // Array of hashtags
+  mentions        String[]  // Array of mentions
+  metricsJson     Json?     // Views, likes, comments, shares
+  postedAt        DateTime?
+  thumbnailUrl    String?
+  rawJson         Json?     // Raw API response for reference
+  importSource    String?   // 'api', 'manual', 'csv'
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  socialAccount  SocialAccount?  @relation(fields: [socialAccountId], references: [id], onDelete: SetNull)
+  rightsRequest  RightsRequest?
+  mediaAssets    MediaAsset[]
+  contentProductMaps ContentProductMap[]
+
+  @@unique([workspaceId, platform, postUrl])
+  @@index([workspaceId, platform])
+  @@index([workspaceId, creatorHandle])
+  @@map("ugc_posts")
+}
+
+// =============================================================================
+// RIGHTS MANAGEMENT
+// =============================================================================
+
+model RightsRequest {
+  id              String       @id @default(cuid())
+  workspaceId     String
+  ugcPostId       String       @unique
+  status          RightsStatus @default(PENDING)
+  requestMessage  String?      @db.Text // Template message sent to creator
+  requestMethod   String?      // 'dm', 'email', 'comment'
+  requestSentAt   DateTime?
+  proofUrl        String?      // Screenshot/link proving approval
+  proofNotes      String?      @db.Text
+  approvedAt      DateTime?
+  deniedAt        DateTime?
+  expiresAt       DateTime?    // Rights expiration date if applicable
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ugcPost   UgcPost   @relation(fields: [ugcPostId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, status])
+  @@map("rights_requests")
+}
+
+// =============================================================================
+// MEDIA & REPURPOSING
+// =============================================================================
+
+model MediaAsset {
+  id           String      @id @default(cuid())
+  workspaceId  String
+  ugcPostId    String?
+  type         MediaType
+  storageUrl   String?     // S3/R2 URL
+  storageKey   String?     // S3/R2 key
+  originalUrl  String?     // Original platform URL
+  duration     Float?      // Duration in seconds (for video)
+  width        Int?
+  height       Int?
+  fileSize     Int?        // Bytes
+  mimeType     String?
+  status       MediaStatus @default(PENDING)
+  metadata     Json?       // Additional metadata (codec, bitrate, etc.)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ugcPost         UgcPost?         @relation(fields: [ugcPostId], references: [id], onDelete: SetNull)
+  repurposeJobs   RepurposeJob[]
+  repurposedClips RepurposedClip[]
+
+  @@index([workspaceId, status])
+  @@map("media_assets")
+}
+
+model RepurposeJob {
+  id                  String    @id @default(cuid())
+  workspaceId         String
+  sourceMediaAssetId  String
+  status              JobStatus @default(QUEUED)
+  paramsJson          Json      // Clip durations, formats, caption settings
+  outputSummaryJson   Json?     // Summary of generated clips
+  progress            Int       @default(0) // 0-100
+  errorMessage        String?   @db.Text
+  startedAt           DateTime?
+  completedAt         DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  workspace        Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sourceMediaAsset MediaAsset       @relation(fields: [sourceMediaAssetId], references: [id], onDelete: Cascade)
+  repurposedClips  RepurposedClip[]
+
+  @@index([workspaceId, status])
+  @@map("repurpose_jobs")
+}
+
+model RepurposedClip {
+  id                  String      @id @default(cuid())
+  workspaceId         String
+  sourceMediaAssetId  String
+  repurposeJobId      String?
+  storageUrl          String?
+  storageKey          String?
+  format              ClipFormat
+  duration            Float?
+  width               Int?
+  height              Int?
+  startTime           Float?      // Start time in source video
+  endTime             Float?      // End time in source video
+  captionTrackUrl     String?     // SRT/VTT file URL
+  captionBurnedIn     Boolean     @default(false)
+  captionStyle        Json?       // Font, size, position, background
+  thumbnailUrl        String?
+  status              MediaStatus @default(PENDING)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  workspace        Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sourceMediaAsset MediaAsset          @relation(fields: [sourceMediaAssetId], references: [id], onDelete: Cascade)
+  repurposeJob     RepurposeJob?       @relation(fields: [repurposeJobId], references: [id], onDelete: SetNull)
+  contentProductMaps ContentProductMap[]
+  shoppablePageItems ShoppablePageItem[]
+
+  @@index([workspaceId, format])
+  @@map("repurposed_clips")
+}
+
+// =============================================================================
+// PRODUCTS & COMMERCE
+// =============================================================================
+
+model Product {
+  id          String          @id @default(cuid())
+  workspaceId String
+  provider    ProductProvider @default(MANUAL)
+  externalId  String?         // Shopify product ID, etc.
+  title       String
+  description String?         @db.Text
+  price       Decimal?        @db.Decimal(10, 2)
+  currency    String          @default("USD")
+  imageUrl    String?
+  url         String          // Product page URL
+  sku         String?
+  inStock     Boolean         @default(true)
+  syncedAt    DateTime?       // Last sync from provider
+  metadata    Json?           // Additional product data
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  workspace          Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  contentProductMaps ContentProductMap[]
+
+  @@unique([workspaceId, provider, externalId])
+  @@index([workspaceId])
+  @@map("products")
+}
+
+model ContentProductMap {
+  id               String  @id @default(cuid())
+  workspaceId      String
+  ugcPostId        String?
+  repurposedClipId String?
+  productId        String
+  placementJson    Json?   // Position/timing of product tag
+  isPrimary        Boolean @default(false) // Primary featured product
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  ugcPost        UgcPost?        @relation(fields: [ugcPostId], references: [id], onDelete: Cascade)
+  repurposedClip RepurposedClip? @relation(fields: [repurposedClipId], references: [id], onDelete: Cascade)
+  product        Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@map("content_product_maps")
+}
+
+// =============================================================================
+// CAMPAIGNS & SHOPPABLE PAGES
+// =============================================================================
+
+model Campaign {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String
+  utmContent  String?
+  startDate   DateTime?
+  endDate     DateTime?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  shoppablePages ShoppablePage[]
+
+  @@index([workspaceId])
+  @@map("campaigns")
+}
+
+model ShoppablePage {
+  id          String   @id @default(cuid())
+  workspaceId String
+  campaignId  String?
+  slug        String
+  title       String
+  description String?  @db.Text
+  themeJson   Json?    // Colors, layout, branding
+  isPublic    Boolean  @default(false)
+  publishedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  campaign  Campaign?           @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  items     ShoppablePageItem[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId, isPublic])
+  @@map("shoppable_pages")
+}
+
+model ShoppablePageItem {
+  id               String @id @default(cuid())
+  shoppablePageId  String
+  repurposedClipId String
+  position         Int    @default(0)
+  createdAt        DateTime @default(now())
+
+  shoppablePage  ShoppablePage  @relation(fields: [shoppablePageId], references: [id], onDelete: Cascade)
+  repurposedClip RepurposedClip @relation(fields: [repurposedClipId], references: [id], onDelete: Cascade)
+
+  @@unique([shoppablePageId, repurposedClipId])
+  @@map("shoppable_page_items")
+}
+
+// =============================================================================
+// ANALYTICS & EVENTS
+// =============================================================================
+
+model Event {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  type            EventType
+  sessionId       String?
+  visitorId       String?   // Anonymous visitor identifier
+  userAgent       String?
+  ipAddress       String?
+  referrer        String?
+  utmSource       String?
+  utmMedium       String?
+  utmCampaign     String?
+  utmContent      String?
+  utmTerm         String?
+  pageUrl         String?
+  ugcPostId       String?
+  repurposedClipId String?
+  shoppablePageId String?
+  productId       String?
+  revenueAmount   Decimal?  @db.Decimal(10, 2)
+  revenueCurrency String?
+  orderId         String?   // External order ID
+  metadata        Json?     // Additional event data
+  createdAt       DateTime  @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, type, createdAt])
+  @@index([workspaceId, sessionId])
+  @@index([workspaceId, utmCampaign])
+  @@map("events")
+}
+
+// =============================================================================
+// AUDIT LOG
+// =============================================================================
+
+model AuditLog {
+  id          String      @id @default(cuid())
+  workspaceId String
+  userId      String?
+  action      AuditAction
+  entityType  String      // 'rights_request', 'shoppable_page', etc.
+  entityId    String
+  oldData     Json?
+  newData     Json?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime    @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, entityType, entityId])
+  @@index([workspaceId, createdAt])
+  @@map("audit_logs")
+}
