@@ -1,6 +1,7 @@
 // =============================================================================
 // UGC Commerce Engine - Prisma Schema
 // Multi-tenant SaaS database schema for managing UGC, rights, and commerce
+// Version: 1.1.0 - Added ImportLog tables
 // =============================================================================
 
 generator client {
