@@ -202,6 +202,7 @@ model Workspace {
   events           Event[]
   auditLogs        AuditLog[]
   invitations      WorkspaceInvitation[]
+  importLogs       ImportLog[]
 
   @@map("workspaces")
 }
@@ -553,6 +554,67 @@ model Event {
   @@index([workspaceId, sessionId])
   @@index([workspaceId, utmCampaign])
   @@map("events")
+}
+
+// =============================================================================
+// IMPORT LOGS
+// =============================================================================
+
+enum ImportLogStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  PARTIAL
+}
+
+enum ImportLogStep {
+  VALIDATING
+  CHECKING_DUPLICATE
+  EXTRACTING_HASHTAGS
+  CREATING_POST
+  CREATING_RIGHTS_REQUEST
+  FETCHING_MEDIA
+  COMPLETED
+  FAILED
+}
+
+model ImportLog {
+  id          String          @id @default(cuid())
+  workspaceId String
+  source      String          // 'manual', 'csv', 'api'
+  status      ImportLogStatus @default(PENDING)
+  totalItems  Int             @default(1)
+  processed   Int             @default(0)
+  succeeded   Int             @default(0)
+  failed      Int             @default(0)
+  metadata    Json?           // Original import request data
+  startedAt   DateTime        @default(now())
+  completedAt DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  entries   ImportLogEntry[]
+
+  @@index([workspaceId, createdAt])
+  @@map("import_logs")
+}
+
+model ImportLogEntry {
+  id          String         @id @default(cuid())
+  importLogId String
+  step        ImportLogStep
+  status      String         // 'success', 'error', 'warning', 'info'
+  message     String
+  details     Json?          // Additional context (postUrl, error details, etc.)
+  duration    Int?           // Duration in ms
+  createdAt   DateTime       @default(now())
+
+  importLog ImportLog @relation(fields: [importLogId], references: [id], onDelete: Cascade)
+
+  @@index([importLogId, createdAt])
+  @@map("import_log_entries")
 }
 
 // =============================================================================
